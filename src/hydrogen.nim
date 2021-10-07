@@ -364,6 +364,11 @@ proc hydro_secretbox_decrypt*(crypted: string, key: SecretboxKey, msgId: MsgId =
 var pskNull*: array[hydro_kx_PSKBYTES, uint8]
 var contextNull*: array[8, uint8]
 
+type
+  Packet1* = array[hydro_kx_KK_PACKET1BYTES, uint8]
+  Packet2* = array[hydro_kx_KK_PACKET2BYTES, uint8]
+  # Packet3 = array[hydro_kx_KK_PACKET3BYTES, uint8]
+
 ### Generic Hashing
 # proc hydro_hash_hash(str: string, len = hydro_hash_BYTES, context = contextNull , psk = pskNull): string = # TODO make context
 proc hydro_hash_hash*(str: string, len = hydro_hash_BYTES , psk = pskNull): string =
@@ -379,10 +384,33 @@ proc hydro_hash_hash*(str: string, len = hydro_hash_BYTES , psk = pskNull): stri
     raise newException(ValueError, "hydro_hash_hash failed")
 
 
+
 ### Key exchange
+
+### Helper
+proc hydro_bin2hex[T](bin: T): string =
+  let hexLen = (bin.len * 2) + 1
+  result = newString(hexLen)
+  let res = hydro_bin2hex(
+    unsafeAddr result[0],
+    hexLen.csize_t,
+    cast[ptr uint8](unsafeAddr bin),
+    bin.len.csize_t
+  )
+
+proc hydro_hex2bin[T](hex: string): T =
+  let binLen = (hex.len div 2) + 1 # TODO +1?
+  let res = hydro_hex2bin(
+    cast[ptr uint8](unsafeAddr result),
+    binLen.csize_t,
+    unsafeAddr hex[0],
+    hex.len.csize_t,
+    "", nil
+  )
 
 when isMainModule:
   import unittest
+  discard hydro_init()
   suite "hydro lowlevel":
     setup:
       var context = "12345678".toContext()
@@ -390,12 +418,44 @@ when isMainModule:
 
       # # PSK of NULL
       # var pskNull: array[hydro_kx_PSKBYTES, uint8]
+
+    ## TODO Here is an error
+    # test "ll hydro_bin2hex / hydro_hex2bin":
+    #   # bin_len * 2 + 1
+    #   var bin = hydro_sign_keygen().sk
+    #   var hexLen = bin.len * 2 + 1
+    #   var hex = newString(hexLen)
+    #   var hexC = cast[cstring](addr hex[0])
+    #   discard hydro_bin2hex(hexC, hexLen.csize_t, cast[ptr uint8](addr bin), bin.len.csize_t)
+    #   echo hex
+
+    #   # var binLen = (hex.len div 2) - 1
+    #   # var binLen = hex.len # div 2) - 1
+    #   var binLen = (hex.len div 2) + 1
+    #   # var bin2 = newString(binLen)
+    #   var bin2 = alloc(binLen)
+    #   echo hydro_hex2bin(cast[ptr uint8](bin2), binLen.csize_t, hexC, hexLen.csize_t, "", nil)
+    #   var bin3 = cast[array[hydro_sign_SECRETKEYBYTES, uint8]](addr bin2)
+    #   echo bin
+    #   echo bin3
+    #   check bin == bin3
+    #   dealloc(bin2)
+
+    test "hl hydro_bin2hex / hydro_hex2bin":
+      var bin = hydro_sign_keygen().sk
+      var hex = hydro_bin2hex(bin)
+      echo hex
+      var bin2 = hydro_hex2bin[array[hydro_sign_SECRETKEYBYTES, uint8]](hex)
+      check bin == bin2
+
+
     test "ll hydro_sign_create / hydro_sign_verify":
       var kp: hydro_sign_keypair
       hydro_sign_keygen(addr kp)
       var sig: Signature
       check 0 == hydro_sign_create(sig, addr msg[0], msg.len.csize_t, context, kp.sk)
       check 0 == hydro_sign_verify(sig, addr msg[0], msg.len.csize_t, context, kp.pk)
+
     test "hl hydro_sign_create / hydro_sign_verify":
       var kp = hydro_sign_keygen()
       var sig = hydro_sign_create(msg, kp.sk, context)
@@ -417,6 +477,7 @@ when isMainModule:
       dealloc(crypted)
       dealloc(pmsg)
 
+
     test "hl hydro_secretbox_encrypt / hydro_secretbox_decrypt":
       var key = hydro_secretbox_keygen()
       var crypted = hydro_secretbox_encrypt(msg, key)
@@ -435,6 +496,7 @@ when isMainModule:
         check 0 == hydro_hash_hash(cast[ptr uint8](addr hash[0]), csize_t(myLen), addr msg[0], msg.len.csize_t, context, pskNull)
         check hash.len == myLen
 
+
     test "hl Generic hashing":
       block:
         let hash = hydro_hash_hash(msg, len = hydro_hash_BYTES)
@@ -444,6 +506,7 @@ when isMainModule:
         let myLen = 1024
         let hash = hydro_hash_hash(msg, len = myLen)
         check hash.len == myLen
+
 
     test "ll N key exchange variant":
       # - What the client needs to know about the server: the server's public key
@@ -488,12 +551,60 @@ when isMainModule:
 
     # test "hl N key exchange variant": # TODO
 
-    # test "ll Key exchange using the KK variant":
+
+    test "ll Key exchange using the KK variant":
       # What the client needs to know about the server: the server's public key
       # What the server needs to know about the client: the client's public key
       # This variant is designed to exchange messages between two parties that already know each other's public key.
+      # Client: generate a long-term key pair
 
+      var clientStaticKp: hydro_kx_keypair
+      hydro_kx_keygen(addr clientStaticKp)
 
+      # Server: generate a long-term key pair
+      var serverStaticKp: hydro_kx_keypair
+      hydro_kx_keygen(addr serverStaticKp)
+
+      # Client: initiate a key exchange
+      var stClient: hydro_kx_state
+      var packet1: Packet1
+      check 0 == hydro_kx_kk_1(addr stClient, packet1, serverStaticKp.pk, addr clientStaticKp)
+
+      # Server: process the initial request from the client, and compute the session keys
+      var packet2: Packet2
+      block:
+        var sessionKp: hydro_kx_session_keypair
+        check 0 == hydro_kx_kk_2(addr sessionKp, packet2, packet1, clientStaticKp.pk, addr serverStaticKp)
+        # Done! sessionKp.tx is the key for sending data to the client,
+        # and sessionKp.rx is the key for receiving data from the client.
+
+      # Client: process the server packet and compute the session keys
+      block:
+        var sessionKp: hydro_kx_session_keypair
+        check 0 == hydro_kx_kk_3(addr stClient, addr sessionKp, packet2, addr clientStaticKp)
+        # Done! sessionKp.tx is the key for sending data to the server,
+        # and sessionKp.rx is the key for receiving data from the server.
+        # The session keys are the same as those computed by the server, but swapped.
+
+# DOES NOT WORK.
+# import ed25519
+# var secret = newString(32)
+# var clientStaticKp: hydro_kx_keypair
+# hydro_kx_keygen(addr clientStaticKp)
+
+# # Server: generate a long-term key pair
+# var serverStaticKp: hydro_kx_keypair
+# hydro_kx_keygen(addr serverStaticKp)
+
+# var both1: array[64, uint8]
+# copyMem(addr both1[0], addr serverStaticKp.pk, 32)
+# copyMem(addr both1[31], addr serverStaticKp.sk, 32)
+# echo keyExchange(clientStaticKp.pk, both1)
+
+# var both2: array[64, uint8]
+# copyMem(addr both2[0], addr clientStaticKp.pk, 32)
+# copyMem(addr both2[31], addr clientStaticKp.sk, 32)
+# echo keyExchange(serverStaticKp.pk, both2)
 
 # when isMainModule:
 #   # https://github.com/jedisct1/libhydrogen/wiki
