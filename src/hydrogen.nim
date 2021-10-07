@@ -605,21 +605,3 @@ when isMainModule:
 # copyMem(addr both2[0], addr clientStaticKp.pk, 32)
 # copyMem(addr both2[31], addr clientStaticKp.sk, 32)
 # echo keyExchange(serverStaticKp.pk, both2)
-
-# when isMainModule:
-#   # https://github.com/jedisct1/libhydrogen/wiki
-#   var context = "12345678".toContext()
-#   echo hydro_init()
-#   echo hydro_random_u32()
-#   echo hydro_random_u32()
-#   echo hydro_random_u32()
-#   var kp = hydro_sign_keypair()
-#   hydro_sign_keygen(addr kp)
-#   echo kp
-#   var msg = "foobaa"
-#   # var signature: Signature
-#   # echo hydro_sign_create(signature, addr msg[0], msg.len.csize_t, context, kp.sk)
-#   var signature2 = hydro_sign_create("1", kp.sk, context)
-#   echo signature2
-#   echo hydro_sign_verify(signature2, msg, kp.pk, context)
-# # proc hydro_random_u32*(): uint32 {.cdecl, importc: "hydro_random_u32".}
