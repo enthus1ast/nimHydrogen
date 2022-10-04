@@ -1,5 +1,6 @@
 {.passl:"-lhydrogen -L./".}
 
+import print
 
 proc hydro_init*(): cint {.cdecl, importc: "hydro_init".}
 ##  ----------------
@@ -552,7 +553,7 @@ when isMainModule:
     # test "hl N key exchange variant": # TODO
 
 
-    test "ll Key exchange using the KK variant":
+    test "ll KK key exchange variant":
       # What the client needs to know about the server: the server's public key
       # What the server needs to know about the client: the client's public key
       # This variant is designed to exchange messages between two parties that already know each other's public key.
@@ -585,6 +586,48 @@ when isMainModule:
         # Done! sessionKp.tx is the key for sending data to the server,
         # and sessionKp.rx is the key for receiving data from the server.
         # The session keys are the same as those computed by the server, but swapped.
+
+    test "ll XX key exchange variant":
+      # What the client needs to know about the server: nothing
+      # What the server needs to know about the client: nothing
+      # This is the most versatile variant, but it requires two round trips. In this variant, the client and the server don't need to share any prior data. However, the peers public keys will be exchanged. Discovered public keys can then be discarded, used for authentication, or reused later with the KK variant.
+
+      # Client: generate a long-term key pair
+      var client_static_kp: hydro_kx_keypair
+      hydro_kx_keygen(addr client_static_kp)
+
+      # Server: generate a long-term key pair
+      var server_static_kp: hydro_kx_keypair
+      hydro_kx_keygen(addr server_static_kp)
+
+      # Client: initiate a key exchange
+      var st_client: hydro_kx_state
+      var packet1: array[hydro_kx_XX_PACKET1BYTES, uint8]
+      assert 0 == hydro_kx_xx_1(addr st_client, packet1, pskNull); # psk is optional
+
+      # Server: process the initial request from the client
+      var st_server: hydro_kx_state
+      var packet2: array[hydro_kx_XX_PACKET2BYTES, uint8]
+      check 0 == hydro_kx_xx_2(addr st_server, packet2, packet1, pskNull, addr server_static_kp)
+
+      # Client: process the server packet and compute the session keys
+      var packet3: array[hydro_kx_XX_PACKET3BYTES, uint8]
+      var client_session_kp: hydro_kx_session_keypair
+      check 0 == hydro_kx_xx_3(addr st_client, addr client_session_kp,
+          packet3, pskNull, packet2, pskNull, addr client_static_kp)
+      # Done! session_kp.tx is the key for sending data to the server,
+      # and session_kp.rx is the key for receiving data from the server.
+
+      # Server: process the client packet and compute the session keys:
+      var server_session_kp: hydro_kx_session_keypair
+      print client_session_kp
+      # print
+      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, pskNull, packet3, pskNull)
+      # Done! session_kp.tx is the key for sending data to the client,
+      # and session_kp.rx is the key for receiving data from the client.
+      # The session keys are the same as those computed by the client, but swapped.
+
+
 
 # DOES NOT WORK.
 # import ed25519
