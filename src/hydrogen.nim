@@ -1,7 +1,5 @@
 {.passl:"-lhydrogen -L./".}
 
-import print
-
 proc hydro_init*(): cint {.cdecl, importc: "hydro_init".}
 ##  ----------------
 
@@ -620,9 +618,8 @@ when isMainModule:
 
       # Server: process the client packet and compute the session keys:
       var server_session_kp: hydro_kx_session_keypair
-      print client_session_kp
-      # print
-      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, pskNull, packet3, pskNull)
+      var peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
+      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, peer_static_pk, packet3, pskNull)
       # Done! session_kp.tx is the key for sending data to the client,
       # and session_kp.rx is the key for receiving data from the client.
       # The session keys are the same as those computed by the client, but swapped.
