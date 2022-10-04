@@ -382,7 +382,28 @@ proc hydro_hash_hash*(str: string, len = hydro_hash_BYTES , psk = pskNull): stri
   ):
     raise newException(ValueError, "hydro_hash_hash failed")
 
+type
+  MasterKey = array[hydro_pwhash_MASTERKEYBYTES, uint8]
 
+proc hydro_pwhash_keygen*(): MasterKey =
+  hydro_pwhash_keygen(result)
+
+
+proc hydro_pwhash_deterministic*(master_key: MasterKey, password: string,
+    hashLen: uint, opslimit: uint64, ctx: Context = defaultContext): seq[uint8] =
+  result = newSeq[uint8](hashLen)
+  if 0 != hydro_pwhash_deterministic(
+    h = addr result[0],
+    h_len = hashLen.csize_t,
+    passwd = unsafeAddr password[0],
+    passwd_len = password.len.csize_t,
+    ctx = ctx,
+    master_key = master_key,
+    opslimit = opslimit,
+    memlimit = 0, # ignored
+    threads = 1, # ignored
+  ):
+    raise newException(ValueError, "hydro_pwhash_deterministic failed")
 
 ### Key exchange
 
@@ -623,6 +644,64 @@ when isMainModule:
       # Done! session_kp.tx is the key for sending data to the client,
       # and session_kp.rx is the key for receiving data from the client.
       # The session keys are the same as those computed by the client, but swapped.
+
+    test "ll hydro_pwhash_keygen":
+      var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
+
+      var p1: array[hydro_pwhash_MASTERKEYBYTES, uint8]
+      hydro_pwhash_keygen(p1)
+
+      var p2: array[hydro_pwhash_MASTERKEYBYTES, uint8]
+      hydro_pwhash_keygen(p2)
+
+      check p0 != p1
+      check p0 != p2
+      check p1 != p2
+
+    test "hl hydro_pwhash_keygen":
+      var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
+      var p1 = hydro_pwhash_keygen()
+      var p2 = hydro_pwhash_keygen()
+      check p0 != p1
+      check p0 != p2
+      check p1 != p2
+
+    test "ll hydro_pwhash_deterministic":
+      let master_key = hydro_pwhash_keygen()
+      let CONTEXT = "Examples".toContext()
+      let OPSLIMIT = 10000.uint64
+      let MEMLIMIT = 0.csize_t
+      let THREADS =  1.uint8
+      let PASSWORD = "test"
+      let PASSWORD_LEN = 4.csize_t
+      var derived_key_null: array[32, uint8];
+      var derived_key_1: array[32, uint8];
+      var derived_key_2: array[32, uint8];
+      check 0 == hydro_pwhash_deterministic(addr derived_key_1[0], sizeof(derived_key_1).csize_t, PASSWORD, PASSWORD_LEN,
+                                CONTEXT, master_key, OPSLIMIT, MEMLIMIT, THREADS);
+      check 0 == hydro_pwhash_deterministic(addr derived_key_2[0], sizeof(derived_key_2).csize_t, PASSWORD, PASSWORD_LEN,
+                                CONTEXT, master_key, OPSLIMIT, MEMLIMIT, THREADS);
+      check derived_key_null != derived_key_1
+      check derived_key_null != derived_key_2
+      check derived_key_1 == derived_key_2
+
+      # change the master key and test if derived keys are different
+      let master_key2 = hydro_pwhash_keygen()
+      var derived_key_m2_1: array[32, uint8];
+      var derived_key_m2_2: array[32, uint8];
+      check 0 == hydro_pwhash_deterministic(addr derived_key_m2_1[0], sizeof(derived_key_1).csize_t, PASSWORD, PASSWORD_LEN,
+                                CONTEXT, master_key2, OPSLIMIT, MEMLIMIT, THREADS);
+      check 0 == hydro_pwhash_deterministic(addr derived_key_m2_2[0], sizeof(derived_key_2).csize_t, PASSWORD, PASSWORD_LEN,
+                                CONTEXT, master_key2, OPSLIMIT, MEMLIMIT, THREADS);
+      check derived_key_m2_1 != derived_key_1
+      check derived_key_m2_2 != derived_key_2
+      check derived_key_m2_1 == derived_key_m2_2
+
+
+    # test "hl hydro_pwhash_deterministic":
+    #   discard
+    #   raise
+
 
 
 
