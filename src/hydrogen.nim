@@ -857,6 +857,17 @@ when isMainModule:
       check true == hydro_pwhash_verify(pwhash1, password, masterKey, 10'u64)
       check true == hydro_pwhash_verify(pwhash2, password, masterKey, 10'u64)
 
+  test "ll hydro_pwhash_derive_static_key":
+    check false
+
+  test "hl hydro_pwhash_derive_static_key":
+    check false
+
+  test "ll hydro_pwhash_reencrypt":
+    check false
+
+  test "hl hydro_pwhash_reencrypt":
+    check false
 
 
 # DOES NOT WORK.
