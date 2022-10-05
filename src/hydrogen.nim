@@ -1,3 +1,6 @@
+# TODO:
+# - create array types and use them throughout the wrapper
+
 {.passl:"-lhydrogen -L./".}
 
 proc hydro_init*(): cint {.cdecl, importc: "hydro_init".}
@@ -406,9 +409,34 @@ proc hydro_pwhash_deterministic*(masterKey: MasterKey, password: string,
   ):
     raise newException(ValueError, "hydro_pwhash_deterministic failed")
 
-proc hydro_pwhash_create*(masterKey: MasterKey, password: string, hashLen: uint64, opslimit: int, memlimit = 0, threads = 1): seq[uint8] =
-  discard
+proc hydro_pwhash_create*(masterKey: MasterKey, password: string, opslimit: uint64, memlimit: csize_t = 0, threads: uint8 = 1): array[hydro_pwhash_STOREDBYTES, uint8] =
+  if (0 != hydro_pwhash_create(
+    result,
+    passwd = unsafeAddr password[0],
+    passwd_len = password.len().csize_t,
+    master_key = masterKey,
+    opslimit = opslimit,
+    memlimit = memlimit,
+    threads = threads
+  )):
+    raise newException(ValueError, "hydro_pwhash_create failed")
 
+
+type
+  PwHash = array[hydro_pwhash_STOREDBYTES, uint8]
+
+proc hydro_pwhash_verify*(pwhash: PwHash, password: string, masterKey: MasterKey, opslimitMax: uint64, memlimitMax: uint64 = 0, threadsMax: uint8 = 1): bool =
+  ## if the password could be verified,
+  ## true is returned, false otherwise.
+  return 0 == hydro_pwhash_verify(
+    pwhash,
+    unsafeAddr password[0],
+    password.len().csize_t,
+    masterKey,
+    opslimitMax,
+    memlimitMax.csize_t,
+    threadsMax
+  )
 ### Key exchange
 
 ### Helper
@@ -763,7 +791,71 @@ when isMainModule:
       check pwhashempty != pwhash2
       check pwhash != pwhash2
 
+      # Verify the password
+      check 0 == hydro_pwhash_verify(
+        pwhash,
+        addr passwd[0],
+        passwd_len = passwd.len().csize_t,
+        master_key = masterKey,
+        opslimit_max = opslimit,
+        memlimit_max = memlimit,
+        threads_max = threads
+      )
+      check 0 == hydro_pwhash_verify(
+        pwhash2,
+        addr passwd2[0],
+        passwd_len = passwd2.len().csize_t,
+        master_key = masterKey,
+        opslimit_max = opslimit,
+        memlimit_max = memlimit,
+        threads_max = threads
+      )
+      # try a wrong password
+      var wrongPassword = "wrongPassword"
+      check -1 == hydro_pwhash_verify(
+        pwhash2,
+        addr wrongPassword[0],
+        passwd_len = wrongPassword.len().csize_t,
+        master_key = masterKey,
+        opslimit_max = opslimit,
+        memlimit_max = memlimit,
+        threads_max = threads
+      )
 
+
+    test "hl hydro_pwhash_create":
+      let masterKey = hydro_pwhash_keygen()
+      let pwhash1 = hydro_pwhash_create(masterKey, "password", 10)
+      let pwhash2 = hydro_pwhash_create(masterKey, "password", 10)
+      var pwhashempty: array[hydro_pwhash_STOREDBYTES, uint8]
+      check pwhashempty != pwhash1
+      check pwhashempty != pwhash2
+      check pwhash1 != pwhash2
+
+      # even if the pwhash1 != pwhash2,
+      # both should be valid representations of "password"
+      var password = "password"
+      check 0 == hydro_pwhash_verify(
+        pwhash1,
+        addr password[0],
+        passwd_len = password.len().csize_t,
+        master_key = masterKey,
+        opslimit_max = 10,
+        memlimit_max = 0,
+        threads_max = 1
+      )
+      check 0 == hydro_pwhash_verify(
+        pwhash2,
+        addr password[0],
+        passwd_len = password.len().csize_t,
+        master_key = masterKey,
+        opslimit_max = 10,
+        memlimit_max = 0,
+        threads_max = 1
+      )
+      # Do the same check with the high level wrapper
+      check true == hydro_pwhash_verify(pwhash1, password, masterKey, 10'u64)
+      check true == hydro_pwhash_verify(pwhash2, password, masterKey, 10'u64)
 
 
 
