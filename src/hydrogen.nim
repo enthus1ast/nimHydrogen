@@ -406,6 +406,9 @@ proc hydro_pwhash_deterministic*(master_key: MasterKey, password: string,
   ):
     raise newException(ValueError, "hydro_pwhash_deterministic failed")
 
+proc hydro_pwhash_create*(masterKey: MasterKey, password: string, hashLen: uint64, opslimit: int, memlimit = 0, threads = 1): seq[uint8] =
+  discard
+
 ### Key exchange
 
 ### Helper
@@ -723,6 +726,22 @@ when isMainModule:
         memlimit = memlimit,
         threads = threads
       )
+
+      var pwhash2: array[hydro_pwhash_STOREDBYTES, uint8]
+      var passwd2 = "anotherPassword"
+      check 0 == hydro_pwhash_create(
+        stored = pwhash2,
+        passwd = addr passwd2[0],
+        passwd_len = passwd2.len().csize_t,
+        master_key = masterKey,
+        opslimit = opslimit,
+        memlimit = memlimit,
+        threads = threads
+      )
+      var pwhashempty: array[hydro_pwhash_STOREDBYTES, uint8]
+      check pwhashempty != pwhash
+      check pwhashempty != pwhash2
+      check pwhash != pwhash2
 
 
 
