@@ -606,6 +606,7 @@ when isMainModule:
         # and sessionKp.rx is the key for receiving data from the server.
         # The session keys are the same as those computed by the server, but swapped.
 
+
     test "ll XX key exchange variant":
       # What the client needs to know about the server: nothing
       # What the server needs to know about the client: nothing
@@ -632,18 +633,21 @@ when isMainModule:
       # Client: process the server packet and compute the session keys
       var packet3: array[hydro_kx_XX_PACKET3BYTES, uint8]
       var client_session_kp: hydro_kx_session_keypair
+      var client_peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
       check 0 == hydro_kx_xx_3(addr st_client, addr client_session_kp,
-          packet3, pskNull, packet2, pskNull, addr client_static_kp)
+          packet3, client_peer_static_pk, packet2, pskNull, addr client_static_kp)
       # Done! session_kp.tx is the key for sending data to the server,
       # and session_kp.rx is the key for receiving data from the server.
 
       # Server: process the client packet and compute the session keys:
       var server_session_kp: hydro_kx_session_keypair
-      var peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
-      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, peer_static_pk, packet3, pskNull)
+      var server_peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
+      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, server_peer_static_pk, packet3, pskNull)
       # Done! session_kp.tx is the key for sending data to the client,
       # and session_kp.rx is the key for receiving data from the client.
       # The session keys are the same as those computed by the client, but swapped.
+
+
 
     test "ll hydro_pwhash_keygen":
       var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
@@ -657,6 +661,7 @@ when isMainModule:
       check p0 != p1
       check p0 != p2
       check p1 != p2
+
 
     test "hl hydro_pwhash_keygen":
       var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
@@ -701,6 +706,24 @@ when isMainModule:
     # test "hl hydro_pwhash_deterministic":
     #   discard
     #   raise
+
+    test "ll hydro_pwhash_create":
+      let masterKey = hydro_pwhash_keygen()
+      var pwhash: array[hydro_pwhash_STOREDBYTES, uint8]
+      var passwd = "p4ssw0rd"
+      var opslimit = 10.uint64 # <- choose a higher value for production!
+      var memlimit = 0.csize_t
+      var threads = 1.uint8
+      check 0 == hydro_pwhash_create(
+        stored = pwhash,
+        passwd = addr passwd[0],
+        passwd_len = passwd.len().csize_t,
+        master_key = masterKey,
+        opslimit = opslimit,
+        memlimit = memlimit,
+        threads = threads
+      )
+
 
 
 
