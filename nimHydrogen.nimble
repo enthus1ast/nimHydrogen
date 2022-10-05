@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.1.2"
 author        = "David Krause"
 description   = "wrapper for libhydrogen"
 license       = "MIT"

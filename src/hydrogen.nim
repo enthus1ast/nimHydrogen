@@ -389,7 +389,7 @@ proc hydro_pwhash_keygen*(): MasterKey =
   hydro_pwhash_keygen(result)
 
 
-proc hydro_pwhash_deterministic*(master_key: MasterKey, password: string,
+proc hydro_pwhash_deterministic*(masterKey: MasterKey, password: string,
     hashLen: uint, opslimit: uint64, ctx: Context = defaultContext): seq[uint8] =
   result = newSeq[uint8](hashLen)
   if 0 != hydro_pwhash_deterministic(
@@ -398,7 +398,7 @@ proc hydro_pwhash_deterministic*(master_key: MasterKey, password: string,
     passwd = unsafeAddr password[0],
     passwd_len = password.len.csize_t,
     ctx = ctx,
-    master_key = master_key,
+    master_key = masterKey,
     opslimit = opslimit,
     memlimit = 0, # ignored
     threads = 1, # ignored
@@ -698,8 +698,29 @@ when isMainModule:
       check derived_key_m2_1 == derived_key_m2_2
 
 
-    # test "hl hydro_pwhash_deterministic":
-    #   discard
+    test "hl hydro_pwhash_deterministic":
+      let masterKey = hydro_pwhash_keygen()
+      const password = "p4ssw0rd"
+      const emptyKey = newSeq[uint8](16)
+
+      let derived_key_1 = hydro_pwhash_deterministic(
+        masterKey = masterKey,
+        password = password,
+        hashLen = 16,
+        opslimit = 10
+      )
+      let derived_key_2 = hydro_pwhash_deterministic(
+        masterKey = masterKey,
+        password = password,
+        hashLen = 16,
+        opslimit = 10
+      )
+      check derived_key_1 != emptyKey
+      check derived_key_2 != emptyKey
+      check derived_key_1 == derived_key_2
+
+
+
     #   raise
 
 
