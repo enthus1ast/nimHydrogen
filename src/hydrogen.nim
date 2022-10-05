@@ -360,8 +360,9 @@ proc hydro_secretbox_decrypt*(crypted: string, key: SecretboxKey, msgId: MsgId =
   if 0 != hydro_secretbox_decrypt(unsafeAddr result[0], cast[ptr uint8](unsafeAddr crypted[0]), crypted.len.csize_t, msgId, context, key):
     raise newException(ValueError, "hydro_secretbox_decrypt failed")
 
-var pskNull*: array[hydro_kx_PSKBYTES, uint8]
-var contextNull*: array[8, uint8]
+const
+  pskNull*: array[hydro_kx_PSKBYTES, uint8] = default array[hydro_kx_PSKBYTES, uint8]
+  contextNull*: array[8, uint8] = default array[8, uint8]
 
 type
   Packet1* = array[hydro_kx_KK_PACKET1BYTES, uint8]
@@ -405,22 +406,25 @@ proc hydro_pwhash_deterministic*(masterKey: MasterKey, password: string,
   ):
     raise newException(ValueError, "hydro_pwhash_deterministic failed")
 
+proc hydro_pwhash_create*(masterKey: MasterKey, password: string, hashLen: uint64, opslimit: int, memlimit = 0, threads = 1): seq[uint8] =
+  discard
+
 ### Key exchange
 
 ### Helper
-proc hydro_bin2hex[T](bin: T): string =
+proc hydro_bin2hex*[T](bin: T): string =
   let hexLen = (bin.len * 2) + 1
   result = newString(hexLen)
-  let res = hydro_bin2hex(
+  discard hydro_bin2hex(
     unsafeAddr result[0],
     hexLen.csize_t,
     cast[ptr uint8](unsafeAddr bin),
     bin.len.csize_t
   )
 
-proc hydro_hex2bin[T](hex: string): T =
+proc hydro_hex2bin*[T](hex: string): T =
   let binLen = (hex.len div 2) + 1 # TODO +1?
-  let res = hydro_hex2bin(
+  assert T.len == hydro_hex2bin(
     cast[ptr uint8](unsafeAddr result),
     binLen.csize_t,
     unsafeAddr hex[0],
@@ -464,7 +468,6 @@ when isMainModule:
     test "hl hydro_bin2hex / hydro_hex2bin":
       var bin = hydro_sign_keygen().sk
       var hex = hydro_bin2hex(bin)
-      echo hex
       var bin2 = hydro_hex2bin[array[hydro_sign_SECRETKEYBYTES, uint8]](hex)
       check bin == bin2
 
@@ -606,6 +609,7 @@ when isMainModule:
         # and sessionKp.rx is the key for receiving data from the server.
         # The session keys are the same as those computed by the server, but swapped.
 
+
     test "ll XX key exchange variant":
       # What the client needs to know about the server: nothing
       # What the server needs to know about the client: nothing
@@ -632,18 +636,21 @@ when isMainModule:
       # Client: process the server packet and compute the session keys
       var packet3: array[hydro_kx_XX_PACKET3BYTES, uint8]
       var client_session_kp: hydro_kx_session_keypair
+      var client_peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
       check 0 == hydro_kx_xx_3(addr st_client, addr client_session_kp,
-          packet3, pskNull, packet2, pskNull, addr client_static_kp)
+          packet3, client_peer_static_pk, packet2, pskNull, addr client_static_kp)
       # Done! session_kp.tx is the key for sending data to the server,
       # and session_kp.rx is the key for receiving data from the server.
 
       # Server: process the client packet and compute the session keys:
       var server_session_kp: hydro_kx_session_keypair
-      var peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
-      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, peer_static_pk, packet3, pskNull)
+      var server_peer_static_pk: array[hydro_kx_PUBLICKEYBYTES, uint8]
+      check 0 == hydro_kx_xx_4(addr st_server, addr server_session_kp, server_peer_static_pk, packet3, pskNull)
       # Done! session_kp.tx is the key for sending data to the client,
       # and session_kp.rx is the key for receiving data from the client.
       # The session keys are the same as those computed by the client, but swapped.
+
+
 
     test "ll hydro_pwhash_keygen":
       var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
@@ -657,6 +664,7 @@ when isMainModule:
       check p0 != p1
       check p0 != p2
       check p1 != p2
+
 
     test "hl hydro_pwhash_keygen":
       var p0: array[hydro_pwhash_MASTERKEYBYTES, uint8]
@@ -721,6 +729,40 @@ when isMainModule:
 
     # test "ll hydro_pwhash_create":
     #     discard
+
+    test "ll hydro_pwhash_create":
+      let masterKey = hydro_pwhash_keygen()
+      var pwhash: array[hydro_pwhash_STOREDBYTES, uint8]
+      var passwd = "p4ssw0rd"
+      var opslimit = 10.uint64 # <- choose a higher value for production!
+      var memlimit = 0.csize_t
+      var threads = 1.uint8
+      check 0 == hydro_pwhash_create(
+        stored = pwhash,
+        passwd = addr passwd[0],
+        passwd_len = passwd.len().csize_t,
+        master_key = masterKey,
+        opslimit = opslimit,
+        memlimit = memlimit,
+        threads = threads
+      )
+
+      var pwhash2: array[hydro_pwhash_STOREDBYTES, uint8]
+      var passwd2 = "anotherPassword"
+      check 0 == hydro_pwhash_create(
+        stored = pwhash2,
+        passwd = addr passwd2[0],
+        passwd_len = passwd2.len().csize_t,
+        master_key = masterKey,
+        opslimit = opslimit,
+        memlimit = memlimit,
+        threads = threads
+      )
+      var pwhashempty: array[hydro_pwhash_STOREDBYTES, uint8]
+      check pwhashempty != pwhash
+      check pwhashempty != pwhash2
+      check pwhash != pwhash2
+
 
 
 
