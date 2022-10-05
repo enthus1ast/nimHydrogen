@@ -361,8 +361,9 @@ proc hydro_secretbox_decrypt*(crypted: string, key: SecretboxKey, msgId: MsgId =
   if 0 != hydro_secretbox_decrypt(unsafeAddr result[0], cast[ptr uint8](unsafeAddr crypted[0]), crypted.len.csize_t, msgId, context, key):
     raise newException(ValueError, "hydro_secretbox_decrypt failed")
 
-var pskNull*: array[hydro_kx_PSKBYTES, uint8]
-var contextNull*: array[8, uint8]
+const
+  pskNull*: array[hydro_kx_PSKBYTES, uint8] = default array[hydro_kx_PSKBYTES, uint8]
+  contextNull*: array[8, uint8] = default array[8, uint8]
 
 type
   Packet1* = array[hydro_kx_KK_PACKET1BYTES, uint8]
@@ -388,19 +389,19 @@ proc hydro_hash_hash*(str: string, len = hydro_hash_BYTES , psk = pskNull): stri
 ### Key exchange
 
 ### Helper
-proc hydro_bin2hex[T](bin: T): string =
+proc hydro_bin2hex*[T](bin: T): string =
   let hexLen = (bin.len * 2) + 1
   result = newString(hexLen)
-  let res = hydro_bin2hex(
+  discard hydro_bin2hex(
     unsafeAddr result[0],
     hexLen.csize_t,
     cast[ptr uint8](unsafeAddr bin),
     bin.len.csize_t
   )
 
-proc hydro_hex2bin[T](hex: string): T =
+proc hydro_hex2bin*[T](hex: string): T =
   let binLen = (hex.len div 2) + 1 # TODO +1?
-  let res = hydro_hex2bin(
+  assert T.len == hydro_hex2bin(
     cast[ptr uint8](unsafeAddr result),
     binLen.csize_t,
     unsafeAddr hex[0],
@@ -444,7 +445,6 @@ when isMainModule:
     test "hl hydro_bin2hex / hydro_hex2bin":
       var bin = hydro_sign_keygen().sk
       var hex = hydro_bin2hex(bin)
-      echo hex
       var bin2 = hydro_hex2bin[array[hydro_sign_SECRETKEYBYTES, uint8]](hex)
       check bin == bin2
 
