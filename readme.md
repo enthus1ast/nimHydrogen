@@ -1,5 +1,7 @@
 wrapper for libhydrogen
 
+(not production ready, work in process)
+
 https://github.com/jedisct1/libhydrogen/
 
 usage:
